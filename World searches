@@ -1,0 +1,89 @@
+library(tidyr)
+library(gtrendsR)
+library(magrittr)
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(tmap)
+
+#To find out the search interest for the term Friends Reunion in the last 3 months across the world
+gtrends(
+  keyword = c("Friends Reunion"),
+  geo = "",
+  time = "today 3-m",
+  gprop = c("web", "news", "images", "froogle", "youtube"),
+  category = 0,
+  hl = "en-US",
+  low_search_volume = TRUE,
+  cookie_url = "http://trends.google.com/Cookies/NID"
+)->G1
+
+#To pull out data on how the interest has changed over the set period of time
+G1$interest_over_time->GW
+GW
+
+#To convert the value of hits into numeric to be able to plot the graph 
+GW$hits <- as.numeric(as.character(GW$hits))
+
+#To remove NA values
+GW%>%drop_na()->GW
+
+#To chart the ggplot
+GW %>% 
+  ggplot(aes(x = date,
+             y = hits, group=keyword, color=keyword))  + scale_color_manual(values= "#9999CC")+
+  theme_test()+
+  labs(title = "Google Web searches for 'Friends Reunion' across the world",
+       subtitle = "From April to end-May 2021",
+       caption = "27th May was the day with the most searches",
+       x= NULL, y = "Interest")+
+  ggforce::facet_zoom(xlim = c(as.POSIXct(as.Date("2021-05-13")),as.POSIXct(as.Date("2021-05-30")))) +
+  geom_smooth(span=0.1,se=FALSE) + geom_vline(xintercept = as.POSIXct(as.Date("2021-05-27")),color = "blue", lwd = 0.5,linetype="dashed")+
+  theme(legend.position = "none") +
+  geom_label_repel(data = subset(GW, hits == 100),
+                   aes(label = as.character(date)),
+                   size = 5,
+                   box.padding = unit(0.35, "lines"),
+                   point.padding = unit(0.3, "lines"))->GWG
+GWG
+
+#To pull out the top queries related to Friends Reunion and plot them in a bar graph
+G1$related_queries%>%
+  filter(related_queries=="top") %>%
+  mutate(value=factor(value,levels=rev(as.character(value))),
+         subject=as.numeric(subject)) %>%
+  top_n(10,value) %>%
+  ggplot(aes(x=value,y=subject)) + 
+  geom_bar(stat='identity',show.legend = F, fill="#9999CC") + 
+  coord_flip() + labs(x="",y="", 
+                      title="How did people across the world search for the Friends Reunion?", 
+                      subtitle = "Top queries related to Friends Reunion")->GWQ
+GWQ + theme_test()->GWQ
+GWQ
+
+#To identify which countries searched about it more and plot it on a map
+G1$interest_by_country->G1c
+G1c$hits<-as.numeric(as.character(G1c$hits))
+G1c%>% drop_na()->G1c
+G1c
+countries
+countries <- spData::world %>%
+  left_join(y=G1c,by = c("name_long" = "location"),keep=T)
+
+tm_shape(countries) +
+  tm_fill("hits",
+          title = "Search Interest",
+          legend.reverse = T,
+          id = "name_long",      palette = "Blues",
+          popup.vars=c(Name = "name_long",
+                       Searches = "hits"))->gwm
+gwm +   tm_layout(
+  main.title = "Where was Friends Reunion searched about the most?", 
+  main.title.position = "center") -> gwm
+gwm
+
+#To interchange between static and interactive maps
+tmap_mode("plot") #static plot
+tmap_options(bg.color = "white", legend.text.color = "black")
+tmap_mode("view") #interactive 
+
