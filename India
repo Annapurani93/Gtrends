@@ -1,0 +1,72 @@
+library(gtrendsR)
+library(dplyr)
+library(magrittr)
+library(ggplot2)
+library(ggrepel)
+library(tmap)
+
+#Search trends in the last 3 months in India for Friends Reunion
+gtrends(
+  keyword = "Friends Reunion",
+  geo = "IN",
+  time = "today 3-m"
+)->G2
+
+#Pull out data for search interest over time in India        
+G2$interest_over_time->GIN
+GIN
+
+#Convert hits into numeric and drop the NA values
+GIN$hits <- as.numeric(as.character(GIN$hits))
+GIN%>%drop_na()->GIN
+
+#Plot the search interest over time using ggplot
+GIN %>% 
+  ggplot(aes(x = date,
+             y = hits,group=keyword,
+             color = keyword))  +
+ theme_test()+
+  labs(title = "Google Web searches for 'Friends Reunion' in India",
+       subtitle ="From April to end-May 2021",
+       caption = "27th May was the day with the most searches",
+       x= NULL, y = "Interest")->G1
+
+#Zoom in to show how the search trend was on the selected few days from the given period
+G1+ ggforce::facet_zoom(xlim = c(as.POSIXct(as.Date("2021-05-13")),as.POSIXct(as.Date("2021-05-30")))) +
+  geom_smooth(span=0.1,se=FALSE) + geom_vline(xintercept = as.POSIXct(as.Date("2021-05-27")),color = "blue", lwd = 0.5,linetype="dashed")+
+  theme(legend.position = "none") -> GING
+
+#Label the trends
+GING +   geom_label_repel(data = subset(GIN, hits == 100),
+                          aes(label = as.character(date)),
+                          size = 5,
+                          box.padding = unit(0.35, "lines"),
+                          point.padding = unit(0.3, "lines"))->GING
+GING
+
+#Pull out the top queries related to Friends Reunion in India
+G2$related_queries%>%
+  filter(related_queries=="top") %>%
+  mutate(value=factor(value,levels=rev(as.character(value))),
+         subject=as.numeric(subject)) %>%
+  top_n(10,value) %>%
+  ggplot(aes(x=value,y=subject,fill="red")) + 
+  geom_bar(stat='identity',show.legend = F) + 
+  coord_flip() + labs(x="",y="",title="Top queries related to Friends Reunion in India")->GINQ
+
+GINQ
+
+#Filter for search interest within regions in India
+G2$interest_by_region->G2R
+G2R
+G2R$hits<-as.numeric(as.character(G2R$hits))
+G2R%>% drop_na()->G2R
+G2R
+
+#Plot a column chart for the locations that searched the most about the show
+G2R%>% filter(hits>30)%>% ggplot(aes(x=reorder(location, hits),y=hits)) + 
+  geom_col(stat='identity',show.legend = F, fill="pink") + labs(title="Top searches in India")->GINQ
+GINQ + coord_flip()+theme_test()+labs(x="",y="", title="Where in India was it most searched about?")->GINQ
+GINQ
+
+
